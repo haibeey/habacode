@@ -69,8 +69,7 @@ fn count_file(path: &Path, buf: &mut [u8]) -> io::Result<Option<(&'static str, u
         }
 
         if consumed == 0 && filled == buf.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 "scan buffer too small for the language's comment markers",
             ));
         }
@@ -103,8 +102,8 @@ impl<'a> Scanner<'a> {
             }
         }
 
-        singles.sort_by(|a, b| b.len().cmp(&a.len()));
-        blocks.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        singles.sort_by_key(|m| std::cmp::Reverse(m.len()));
+        blocks.sort_by_key(|(o, _)| std::cmp::Reverse(o.len()));
 
         let max_marker_len = singles
             .iter()
@@ -165,13 +164,13 @@ impl<'a> Scanner<'a> {
                 continue;
             }
 
-            if let Some(marker) = self.singles.iter().find(|m| buf[i..].starts_with(*m)) {
+            if let Some(marker) = self.singles.iter().find(|m| buf[i..].starts_with(m)) {
                 self.in_line_comment = true;
                 i += marker.len();
                 continue;
             }
 
-            if let Some(&(open, close)) = self.blocks.iter().find(|(o, _)| buf[i..].starts_with(*o))
+            if let Some(&(open, close)) = self.blocks.iter().find(|(o, _)| buf[i..].starts_with(o))
             {
                 self.in_block = Some(close);
                 i += open.len();
