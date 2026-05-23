@@ -38,7 +38,7 @@ Files with extensions not in the config are silently skipped. Symlinks are not f
 
 ## Supported languages
 
-Rust, Go, C, C++, JavaScript, TypeScript, Java, Kotlin, Python, Shell, Markdown, HTML.
+Rust, Go, C, C++, JavaScript, TypeScript, Java, Kotlin, Python, Ruby, Shell, Markdown, HTML.
 
 ## Adding a language
 

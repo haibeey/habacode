@@ -99,6 +99,17 @@ const PROGRAMMING_LANGUAGES_CONFIG: &[Config] = &[
         comment_literal: &[Comment::Single("#")],
     },
     Config {
+        name: "Ruby",
+        ext: "rb",
+        comment_literal: &[
+            Comment::Single("#"),
+            Comment::Double(DoubleSE {
+                open: "=begin",
+                close: "=end",
+            }),
+        ],
+    },
+    Config {
         name: "Markdown",
         ext: "md",
         comment_literal: &[Comment::Double(DoubleSE {
