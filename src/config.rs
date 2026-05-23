@@ -94,6 +94,11 @@ const PROGRAMMING_LANGUAGES_CONFIG: &[Config] = &[
         ],
     },
     Config {
+        name: "Shell",
+        ext: "sh",
+        comment_literal: &[Comment::Single("#")],
+    },
+    Config {
         name: "Markdown",
         ext: "md",
         comment_literal: &[Comment::Double(DoubleSE {
