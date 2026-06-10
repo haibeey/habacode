@@ -1,48 +1,91 @@
-use std::env;
-use std::path::PathBuf;
+use std::collections::HashSet;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
+use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
+
+use clap::Parser;
 
 pub mod code;
 pub mod config;
 
 const DEFAULT_MAX_DEPTH: usize = 50;
 
-fn main() -> ExitCode {
-    let mut args = env::args().skip(1);
-    let mut path: Option<PathBuf> = None;
-    let mut max_depth: usize = DEFAULT_MAX_DEPTH;
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Path to folder to count LOC.
+    path: Option<PathBuf>,
 
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "-d" | "--max-depth" => {
-                let Some(v) = args.next() else {
-                    eprintln!("error: {arg} requires a value");
-                    return ExitCode::from(2);
-                };
+    /// Depth of folders to traverse.
+    #[arg(short, long, default_value_t = DEFAULT_MAX_DEPTH)]
+    max_depth: usize,
 
-                match v.parse() {
-                    Ok(n) => max_depth = n,
-                    Err(_) => {
-                        eprintln!("error: invalid value for {arg}: {v}");
-                        return ExitCode::from(2);
-                    }
-                }
+    /// Text file containing list of files to ignore.
+    #[arg(short, long, default_value = ".gitignore")]
+    ignore_file: String,
+}
+
+fn normalize(path: PathBuf) -> PathBuf {
+    let mut result = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                result.pop();
             }
-
-            _ if path.is_none() => path = Some(PathBuf::from(arg)),
-            _ => {
-                eprintln!("error: unexpected argument: {arg}");
-                return ExitCode::from(2);
-            }
+            other => result.push(other.as_os_str()),
         }
     }
 
-    let Some(path) = path else {
+    result
+}
+
+fn read_ignore_file(
+    root_path: impl AsRef<Path>,
+    path: impl AsRef<Path>,
+) -> io::Result<HashSet<PathBuf>> {
+    let path = path.as_ref();
+
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+
+    let base_dir = root_path.as_ref().canonicalize()?;
+    let mut ignores = HashSet::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let line = line.trim();
+
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let expanded = normalize(base_dir.join(line));
+        ignores.insert(expanded);
+    }
+
+    Ok(ignores)
+}
+
+fn main() -> ExitCode {
+    let args = Args::parse();
+
+    let Some(path) = args.path else {
         eprintln!("usage: habacode <path> [-d|--max-depth N]");
         return ExitCode::from(2);
     };
 
-    let totals = match code::walk(&path, max_depth) {
+    let ignores = read_ignore_file(&path, &args.ignore_file).unwrap_or_default();
+    let full_path = match path.canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let totals = match code::walk(&full_path, args.max_depth, &ignores) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("error: {e}");

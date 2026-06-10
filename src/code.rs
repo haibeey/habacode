@@ -1,17 +1,21 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::config;
 
 const BUF_SIZE: usize = 1024 * 1024;
 
-pub fn walk(root: &Path, max_depth: usize) -> io::Result<HashMap<&'static str, usize>> {
+pub fn walk(
+    root: &Path,
+    max_depth: usize,
+    ignores: &HashSet<PathBuf>,
+) -> io::Result<HashMap<&'static str, usize>> {
     let mut totals: HashMap<&'static str, usize> = HashMap::new();
     let mut buf = vec![0u8; BUF_SIZE];
-    walk_inner(root, max_depth, 0, &mut buf, &mut totals)?;
+    walk_inner(root, max_depth, 0, &mut buf, ignores, &mut totals)?;
     Ok(totals)
 }
 
@@ -20,8 +24,15 @@ fn walk_inner(
     max_depth: usize,
     depth: usize,
     buf: &mut [u8],
+    ignores: &HashSet<PathBuf>,
     totals: &mut HashMap<&'static str, usize>,
 ) -> io::Result<()> {
+    //println!("{}", path.to_str().unwrap());
+    if ignores.iter().any(|i| path.starts_with(i)) {
+        // TODO import O(ignores.size()) to O(1)|| O(depth)
+        return Ok(());
+    }
+
     let meta = fs::symlink_metadata(path)?;
     let file_type = meta.file_type();
 
@@ -38,7 +49,7 @@ fn walk_inner(
         }
         for entry in fs::read_dir(path)? {
             let entry = entry?;
-            walk_inner(&entry.path(), max_depth, depth + 1, buf, totals)?;
+            walk_inner(&entry.path(), max_depth, depth + 1, buf, ignores, totals)?;
         }
     }
 
@@ -322,7 +333,8 @@ mod tests {
         fs::write(dir.join("README.md"), "hello\n").unwrap();
         fs::write(dir.join("unknown.xyz"), "ignored\n").unwrap();
 
-        let totals = walk(&dir, 50).unwrap();
+        let ignores = HashSet::new();
+        let totals = walk(&dir, 50, &ignores).unwrap();
         assert_eq!(totals.get("Rust").copied(), Some(2));
         assert_eq!(totals.get("Python").copied(), Some(1));
         assert_eq!(totals.get("Markdown").copied(), Some(1));
@@ -339,12 +351,36 @@ mod tests {
         fs::write(dir.join("top.rs"), "let a = 1;\n").unwrap();
         fs::write(dir.join("a/b/c/deep.rs"), "let b = 1;\n").unwrap();
 
-        let t1 = walk(&dir, 1).unwrap();
+        let ignores = HashSet::new();
+
+        let t1 = walk(&dir, 1, &ignores).unwrap();
         assert_eq!(t1.get("Rust").copied(), Some(1));
 
-        let t10 = walk(&dir, 10).unwrap();
+        let t10 = walk(&dir, 10, &ignores).unwrap();
         assert_eq!(t10.get("Rust").copied(), Some(2));
 
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn walk_respects_ignore_file() {
+        let dir = std::env::temp_dir().join(format!("habacode-ignore-{}", std::process::id()));
+
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("a/b/c")).unwrap();
+
+        fs::write(dir.join("top.rs"), "let a = 1;\n").unwrap();
+        fs::write(dir.join("a/b/c/deep.rs"), "let b = 1;\n").unwrap();
+
+        let mut ignores = HashSet::new();
+
+        ignores.insert(dir.join("top.rs"));
+        ignores.insert(dir.join("a/b/c/deep.rs"));
+
+        let t1 = walk(&dir, 10, &ignores).unwrap();
+
+        assert!(t1.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
