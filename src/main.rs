@@ -69,6 +69,15 @@ fn read_ignore_file(
     Ok(ignores)
 }
 
+fn format_size(n: usize) -> String {
+    match n {
+        n if n < 1_000 => n.to_string(),
+        n if n < 1_000_000 => format!("{:.0}K", n as f64 / 1_000.0),
+        n if n < 1_000_000_000 => format!("{:.0}M", n as f64 / 1_000_000.0),
+        n => format!("{:.0}B", n as f64 / 1_000_000_000.0),
+    }
+}
+
 fn main() -> ExitCode {
     let args = Args::parse();
 
@@ -104,7 +113,7 @@ fn main() -> ExitCode {
     let name_w = rows.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
 
     for (lang, n) in rows {
-        println!("{:<width$}  {} LOC", lang, n, width = name_w);
+        println!("{:<width$}  {} LOC", lang, format_size(n), width = name_w);
     }
 
     ExitCode::SUCCESS
